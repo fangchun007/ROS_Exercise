@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+
+import math
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+import numpy as np
+import rospy
+from sensor_msgs.msg import Image, JointState
+
+#from simple_arm.srv import *
+
+class image_output(object):
+    def __init__(self):
+        self.rotated_image = Image()
+    def rotate_image_callback(self, data):
+         
+        #print(data.height, data.width)
+        bridge = CvBridge()
+        cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
+        (h, w) = cv_image.shape[:2]
+        center = (w/2, h/2)
+        degree = rospy.get_param("~rotate_angle", 180)
+       
+        M = cv2.getRotationMatrix2D(center, degree, 1.0)
+        rotated_image = cv2.warpAffine(cv_image, M, (w,h))
+        
+        #print("cv_image.shape = ", cv_image.shape)
+        #print("rotated_image.shape:", rotated_image.shape)
+        #bridge.cv2_to_imgmsg(rotated_image, "bgr8")
+#['header', 'height', 'width', 'encoding', 'is_bigendian', 'step', 'data']
+        msg = bridge.cv2_to_imgmsg(rotated_image, "bgr8")
+        msg.header.stamp = rospy.Time.now()
+        self.rotated_image = msg
+
+if __name__ == '__main__':
+    rospy.init_node('rotate_image')
+    image_server = image_output()
+    sub1 = rospy.Subscriber('/rgb_camera/image_raw', Image, image_server.rotate_image_callback)
+    image_pub = rospy.Publisher('/simple_arm/rotated_image',
+                                   Image, queue_size=100)
+    rate = rospy.Rate(100)
+    while not rospy.is_shutdown():
+        #rospy.wait_for_service('/arm_mover/rotated_image', Image)
+        #print(i, ": ", type(image_server.rotated_image))
+        image_pub.publish(image_server.rotated_image)
+        rate.sleep() #If no, the show is discrete
+        
+    rospy.spin()
+
+
